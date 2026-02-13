@@ -15,7 +15,7 @@ import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { GitHubHandler } from "./githubHandler";
 
 export interface Env {
-    NpsMcpAgent: DurableObjectNamespace;
+    NpsMcpAgent: DurableObjectNamespace<NpsMcpAgent>;
     OAUTH_KV: KVNamespace;
     GITHUB_CLIENT_ID: string;
     GITHUB_CLIENT_SECRET: string;

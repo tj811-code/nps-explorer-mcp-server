@@ -22,17 +22,32 @@ app.get("/authorize", async (c) => {
 
 // 2) GitHub redirects back here with ?code=
 app.get("/callback", async (c) => {
-    const oauthReqInfo = JSON.parse(atob(c.req.query("state")!)) as AuthRequest;
+    const state = c.req.query("state");
+    const code = c.req.query("code");
+
+    if (!state || !code) {
+        return new Response("Missing OAuth state or code", { status: 400 });
+    }
+
+    let oauthReqInfo: AuthRequest;
+    try {
+        oauthReqInfo = JSON.parse(atob(state)) as AuthRequest;
+    } catch {
+        return new Response("Invalid OAuth state", { status: 400 });
+    }
+
     const [accessToken, err] = await fetchUpstreamAuthToken({
         upstream_url: "https://github.com/login/oauth/access_token",
         client_id: c.env.GITHUB_CLIENT_ID,
         client_secret: c.env.GITHUB_CLIENT_SECRET,
-        code: c.req.query("code") || "",
+        code,
         redirect_uri: new URL("/callback", c.req.raw.url).href,
     });
     if (err) return err;
+
     const user = await new Octokit({ auth: accessToken }).rest.users.getAuthenticated();
     const { login, name, email } = user.data;
+
     const { redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
         request: oauthReqInfo,
         userId: login,
@@ -40,6 +55,7 @@ app.get("/callback", async (c) => {
         scope: oauthReqInfo.scope,
         props: { login, name, email, accessToken },
     });
+
     return Response.redirect(redirectTo);
 });
 
