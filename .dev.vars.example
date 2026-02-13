@@ -5,6 +5,7 @@ WEATHER_API_KEY=YOUR KEY FROM https://weatherapi.com/
 # WEATHER_PROXY_BASE_URL=https://your-weather-proxy.example.workers.dev
 # WEATHER_PROXY_BEARER_TOKEN=strong-random-token
 # WEATHER_PROXY_SIGNING_SECRET=another-strong-random-secret
+# WEATHER_PROXY_CLIENT_ID=random-client-id
 # REQUIRE_WEATHER_PROXY=true
 GITHUB_CLIENT_ID=YOUR KEY FROM https://github.com/settings/applications
 GITHUB_CLIENT_SECRET=YOUR SECRET FROM https://github.com/settings/applications

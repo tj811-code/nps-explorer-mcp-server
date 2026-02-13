@@ -64,6 +64,7 @@ To avoid sending WeatherAPI keys from this worker's outbound URLs, deploy a sepa
 WEATHER_PROXY_BASE_URL=https://your-weather-proxy.example.workers.dev
 WEATHER_PROXY_BEARER_TOKEN=<strong-random-token>
 WEATHER_PROXY_SIGNING_SECRET=<another-strong-random-secret>
+WEATHER_PROXY_CLIENT_ID=<random-client-id>
 REQUIRE_WEATHER_PROXY=true
 ```
 
@@ -72,7 +73,8 @@ The MCP worker will then call your proxy and the proxy injects `WEATHER_API_KEY`
 Notes:
 - `WEATHER_PROXY_BASE_URL` and `WEATHER_PROXY_BEARER_TOKEN` must be set together.
 - If `REQUIRE_WEATHER_PROXY=true`, startup fails unless proxy vars are fully configured.
-- Proxy supports optional short-lived signed requests (`X-Proxy-Timestamp`, `X-Proxy-Signature`) to reduce risk from bearer token leakage.
+- Proxy supports optional short-lived signed requests (`X-Proxy-Timestamp`, `X-Proxy-Nonce`, `X-Proxy-Signature`) plus `X-Proxy-Client-Id` allowlisting to reduce risk from bearer token leakage.
+- In the proxy worker, set `REQUIRE_SIGNED_REQUESTS=true` and `ALLOWED_PROXY_CLIENT_ID=<same WEATHER_PROXY_CLIENT_ID>` for strongest posture.
 
 5. **Run Locally**
   ```bash

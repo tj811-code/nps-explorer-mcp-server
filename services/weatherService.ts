@@ -155,7 +155,8 @@ export class WeatherApiService implements IWeatherService {
         private readonly apiKey: string,
         private readonly proxyBaseUrl?: string,
         private readonly proxyBearerToken?: string,
-        private readonly proxySigningSecret?: string
+        private readonly proxySigningSecret?: string,
+        private readonly proxyClientId?: string
     ) { }
 
     private async weatherGet<T>(endpoint: string, params: Record<string, string | number>): Promise<T> {
@@ -169,10 +170,18 @@ export class WeatherApiService implements IWeatherService {
             if (this.proxyBearerToken) {
                 headers["Authorization"] = `Bearer ${this.proxyBearerToken}`;
             }
+            if (this.proxyClientId) {
+                headers["X-Proxy-Client-Id"] = this.proxyClientId;
+            }
             if (this.proxySigningSecret) {
                 const ts = Math.floor(Date.now() / 1000).toString();
-                const signingPayload = `${ts}.GET.${proxyUrl.pathname}${proxyUrl.search}`;
+                const nonceBytes = new Uint8Array(16);
+                crypto.getRandomValues(nonceBytes);
+                const nonce = toBase64Url(nonceBytes);
+                const clientId = this.proxyClientId || "default";
+                const signingPayload = `${ts}.${nonce}.${clientId}.GET.${proxyUrl.pathname}${proxyUrl.search}`;
                 headers["X-Proxy-Timestamp"] = ts;
+                headers["X-Proxy-Nonce"] = nonce;
                 headers["X-Proxy-Signature"] = await signProxyRequest(this.proxySigningSecret, signingPayload);
             }
 

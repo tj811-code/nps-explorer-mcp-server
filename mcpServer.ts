@@ -26,6 +26,7 @@ export interface Env {
     WEATHER_PROXY_BASE_URL?: string;
     WEATHER_PROXY_BEARER_TOKEN?: string;
     WEATHER_PROXY_SIGNING_SECRET?: string;
+    WEATHER_PROXY_CLIENT_ID?: string;
     REQUIRE_WEATHER_PROXY?: string;
     ANTHROPIC_API_KEY: string;
 }
@@ -76,7 +77,8 @@ export class NpsMcpAgent extends McpAgent<Env, State> {
             this.env.WEATHER_API_KEY,
             this.env.WEATHER_PROXY_BASE_URL,
             this.env.WEATHER_PROXY_BEARER_TOKEN,
-            this.env.WEATHER_PROXY_SIGNING_SECRET
+            this.env.WEATHER_PROXY_SIGNING_SECRET,
+            this.env.WEATHER_PROXY_CLIENT_ID
         );
 
         // Register resources
