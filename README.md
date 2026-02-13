@@ -75,6 +75,7 @@ Notes:
 - If `REQUIRE_WEATHER_PROXY=true`, startup fails unless proxy vars are fully configured.
 - Proxy supports optional short-lived signed requests (`X-Proxy-Timestamp`, `X-Proxy-Nonce`, `X-Proxy-Signature`) plus `X-Proxy-Client-Id` allowlisting to reduce risk from bearer token leakage.
 - In the proxy worker, set `REQUIRE_SIGNED_REQUESTS=true` and `ALLOWED_PROXY_CLIENT_ID=<same WEATHER_PROXY_CLIENT_ID>` for strongest posture.
+- For global (cross-isolate) abuse control, bind the included `RateLimiterDO` (see `examples/weather-proxy-wrangler.jsonc`).
 
 5. **Run Locally**
   ```bash

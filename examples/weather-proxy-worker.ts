@@ -8,6 +8,7 @@ export interface Env {
   ALLOWED_PROXY_CLIENT_ID?: string;
   REQUIRE_SIGNED_REQUESTS?: string; // "true" | "false"
   MAX_REQUESTS_PER_MINUTE?: string; // default 120
+  RATE_LIMITER?: DurableObjectNamespace; // recommended for global limits
 }
 
 const ALLOWED_ENDPOINTS = new Set(["current.json", "forecast.json", "astronomy.json", "history.json", "future.json"]);
@@ -45,7 +46,7 @@ function tooManyRequests() {
   return new Response("Too Many Requests", { status: 429 });
 }
 
-function isRateLimited(key: string, maxPerMinute: number): boolean {
+function isRateLimitedInMemory(key: string, maxPerMinute: number): boolean {
   const now = Date.now();
   const windowMs = 60_000;
   const entry = rateBucket.get(key);
@@ -55,6 +56,24 @@ function isRateLimited(key: string, maxPerMinute: number): boolean {
   }
   entry.count += 1;
   return entry.count > maxPerMinute;
+}
+
+async function isRateLimitedGlobal(env: Env, key: string, limitPerMinute: number): Promise<boolean> {
+  if (!env.RATE_LIMITER) {
+    return isRateLimitedInMemory(key, limitPerMinute);
+  }
+
+  const id = env.RATE_LIMITER.idFromName(key);
+  const stub = env.RATE_LIMITER.get(id);
+  const resp = await stub.fetch("https://rate-limit/check", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ limitPerMinute }),
+  });
+
+  if (!resp.ok) return true;
+  const data = (await resp.json()) as { allowed: boolean };
+  return !data.allowed;
 }
 
 function validateQuery(endpoint: string, params: URLSearchParams): boolean {
@@ -103,6 +122,40 @@ async function verifySignature(request: Request, env: Env, pathAndQuery: string)
   return ok;
 }
 
+export class RateLimiterDO {
+  constructor(private state: DurableObjectState) {}
+
+  async fetch(request: Request): Promise<Response> {
+    if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+
+    const { limitPerMinute } = (await request.json()) as { limitPerMinute: number };
+    const now = Date.now();
+    const windowMs = 60_000;
+
+    const data = (await this.state.storage.get<{ count: number; windowStart: number }>("counter")) || {
+      count: 0,
+      windowStart: now,
+    };
+
+    let next = data;
+    if (now - data.windowStart >= windowMs) {
+      next = { count: 1, windowStart: now };
+    } else {
+      next = { count: data.count + 1, windowStart: data.windowStart };
+    }
+
+    await this.state.storage.put("counter", next);
+    await this.state.storage.setAlarm(now + 2 * windowMs);
+
+    const allowed = next.count <= Math.max(1, limitPerMinute || 1);
+    return Response.json({ allowed });
+  }
+
+  async alarm(): Promise<void> {
+    await this.state.storage.delete("counter");
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const auth = request.headers.get("authorization") || "";
@@ -123,8 +176,10 @@ export default {
 
     const clientId = request.headers.get("x-proxy-client-id") || "default";
     const maxPerMinute = Math.max(10, Number(env.MAX_REQUESTS_PER_MINUTE || "120") || 120);
-    if (isRateLimited(`ip:${clientIp(request)}`, maxPerMinute)) return tooManyRequests();
-    if (isRateLimited(`client:${clientId}`, Math.max(10, Math.floor(maxPerMinute / 2)))) return tooManyRequests();
+    if (await isRateLimitedGlobal(env, `ip:${clientIp(request)}`, maxPerMinute)) return tooManyRequests();
+    if (await isRateLimitedGlobal(env, `client:${clientId}`, Math.max(10, Math.floor(maxPerMinute / 2)))) {
+      return tooManyRequests();
+    }
 
     const upstream = new URL(`https://api.weatherapi.com/v1/${endpoint}`);
     for (const [k, v] of url.searchParams.entries()) upstream.searchParams.set(k, v);
