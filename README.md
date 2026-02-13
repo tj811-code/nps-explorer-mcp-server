@@ -56,7 +56,18 @@ It runs as a Model Context Protocol (MCP) server on Cloudflare Workers, letting 
   npm i
   ```
 
-4. **Run Locally**
+4. **(Recommended) Use a Weather Proxy**
+
+To avoid sending WeatherAPI keys from this worker's outbound URLs, deploy a separate proxy worker using `examples/weather-proxy-worker.ts` and set:
+
+```bash
+WEATHER_PROXY_BASE_URL=https://your-weather-proxy.example.workers.dev
+WEATHER_PROXY_BEARER_TOKEN=<strong-random-token>
+```
+
+The MCP worker will then call your proxy and the proxy injects `WEATHER_API_KEY` server-side.
+
+5. **Run Locally**
   ```bash
   npm start
   ```

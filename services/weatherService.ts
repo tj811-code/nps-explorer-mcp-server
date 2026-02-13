@@ -132,15 +132,38 @@ export class WeatherApiService implements IWeatherService {
 
     constructor(
         private readonly http: HttpClient,
-        private readonly apiKey: string
+        private readonly apiKey: string,
+        private readonly proxyBaseUrl?: string,
+        private readonly proxyBearerToken?: string
     ) { }
 
-    async getCurrentWeatherByCoords(
-        latitude: number,
-        longitude: number
-    ): Promise<WeatherInfo> {
-        const url = `${this.baseUrl}/current.json?key=${this.apiKey}&q=${latitude},${longitude}`;
-        const resp = await this.http.get<CurrentApiResponse>(url);
+    private async weatherGet<T>(endpoint: string, params: Record<string, string | number>): Promise<T> {
+        if (this.proxyBaseUrl) {
+            const proxyUrl = new URL(`/weatherapi/${endpoint.replace(/^\//, "")}`, this.proxyBaseUrl);
+            for (const [k, v] of Object.entries(params)) {
+                proxyUrl.searchParams.set(k, String(v));
+            }
+
+            const headers: Record<string, string> = {};
+            if (this.proxyBearerToken) {
+                headers["Authorization"] = `Bearer ${this.proxyBearerToken}`;
+            }
+
+            return this.http.get<T>(proxyUrl.toString(), {
+                headers,
+            });
+        }
+
+        const url = new URL(`${this.baseUrl}/${endpoint.replace(/^\//, "")}`);
+        url.searchParams.set("key", this.apiKey);
+        for (const [k, v] of Object.entries(params)) {
+            url.searchParams.set(k, String(v));
+        }
+        return this.http.get<T>(url.toString());
+    }
+
+    async getCurrentWeatherByCoords(latitude: number, longitude: number): Promise<WeatherInfo> {
+        const resp = await this.weatherGet<CurrentApiResponse>("current.json", { q: `${latitude},${longitude}` });
         return {
             location: resp.location.name,
             temp_f: resp.current.temp_f,
@@ -148,12 +171,11 @@ export class WeatherApiService implements IWeatherService {
         };
     }
 
-    async get7DayForecastByCoords(
-        latitude: number,
-        longitude: number
-    ): Promise<ForecastDay[]> {
-        const url = `${this.baseUrl}/forecast.json?key=${this.apiKey}&q=${latitude},${longitude}&days=7`;
-        const resp = await this.http.get<ForecastApiResponse>(url);
+    async get7DayForecastByCoords(latitude: number, longitude: number): Promise<ForecastDay[]> {
+        const resp = await this.weatherGet<ForecastApiResponse>("forecast.json", {
+            q: `${latitude},${longitude}`,
+            days: 7,
+        });
         return resp.forecast.forecastday.map((f) => ({
             date: f.date,
             maxTempF: f.day.maxtemp_f,
@@ -162,13 +184,11 @@ export class WeatherApiService implements IWeatherService {
         }));
     }
 
-    async get7DayForecastByLocation(
-        location: string
-    ): Promise<ForecastDay[]> {
-        // URL-encode the full location string (commas & spaces → %2C, %20, etc)
-        const encodedLocation = encodeURIComponent(location);
-        const url = `${this.baseUrl}/forecast.json?key=${this.apiKey}&q=${encodedLocation}&days=7`;
-        const resp = await this.http.get<ForecastApiResponse>(url);
+    async get7DayForecastByLocation(location: string): Promise<ForecastDay[]> {
+        const resp = await this.weatherGet<ForecastApiResponse>("forecast.json", {
+            q: location,
+            days: 7,
+        });
         return resp.forecast.forecastday.map((f) => ({
             date: f.date,
             maxTempF: f.day.maxtemp_f,
@@ -177,11 +197,11 @@ export class WeatherApiService implements IWeatherService {
         }));
     }
 
-    // Get hourly forecast
     async getHourlyForecast(location: string, days: number = 1): Promise<HourlyForecast[]> {
-        const encodedLocation = encodeURIComponent(location);
-        const url = `${this.baseUrl}/forecast.json?key=${this.apiKey}&q=${encodedLocation}&days=${days}`;
-        const resp = await this.http.get<ForecastApiResponse>(url);
+        const resp = await this.weatherGet<ForecastApiResponse>("forecast.json", {
+            q: location,
+            days,
+        });
 
         const hourlyForecasts: HourlyForecast[] = [];
 
@@ -193,7 +213,7 @@ export class WeatherApiService implements IWeatherService {
                     condition: hour.condition.text,
                     windSpeed: hour.wind_mph,
                     chanceOfRain: hour.chance_of_rain,
-                    feelsLike: hour.feelslike_f
+                    feelsLike: hour.feelslike_f,
                 });
             }
         }
@@ -201,13 +221,13 @@ export class WeatherApiService implements IWeatherService {
         return hourlyForecasts;
     }
 
-    // Get detailed forecast with more data
     async getDetailedForecast(location: string, days: number = 7): Promise<DetailedForecastDay[]> {
-        const encodedLocation = encodeURIComponent(location);
-        const url = `${this.baseUrl}/forecast.json?key=${this.apiKey}&q=${encodedLocation}&days=${days}`;
-        const resp = await this.http.get<ForecastApiResponse>(url);
+        const resp = await this.weatherGet<ForecastApiResponse>("forecast.json", {
+            q: location,
+            days,
+        });
 
-        return resp.forecast.forecastday.map(f => ({
+        return resp.forecast.forecastday.map((f) => ({
             date: f.date,
             maxTempF: f.day.maxtemp_f,
             minTempF: f.day.mintemp_f,
@@ -217,46 +237,47 @@ export class WeatherApiService implements IWeatherService {
             humidity: f.day.avghumidity,
             precipitation: f.day.totalprecip_in,
             windSpeed: f.day.maxwind_mph,
-            windDirection: "N/A", // Not directly available in daily summary
+            windDirection: "N/A",
             chanceOfRain: f.day.daily_chance_of_rain,
             uvIndex: f.day.uv,
-            hourlyForecast: f.hour.map(h => ({
+            hourlyForecast: f.hour.map((h) => ({
                 time: h.time,
                 tempF: h.temp_f,
                 condition: h.condition.text,
                 windSpeed: h.wind_mph,
                 chanceOfRain: h.chance_of_rain,
-                feelsLike: h.feelslike_f
-            }))
+                feelsLike: h.feelslike_f,
+            })),
         }));
     }
 
-    // Get weather alerts
     async getWeatherAlerts(location: string): Promise<WeatherAlert[]> {
-        const encodedLocation = encodeURIComponent(location);
-        const url = `${this.baseUrl}/forecast.json?key=${this.apiKey}&q=${encodedLocation}&days=1&alerts=yes`;
-        const resp = await this.http.get<ForecastApiResponse & AlertsApiResponse>(url);
+        const resp = await this.weatherGet<ForecastApiResponse & AlertsApiResponse>("forecast.json", {
+            q: location,
+            days: 1,
+            alerts: "yes",
+        });
 
         if (!resp.alerts || !resp.alerts.alert) {
             return [];
         }
 
-        return resp.alerts.alert.map(alert => ({
+        return resp.alerts.alert.map((alert) => ({
             alertType: alert.msgtype,
             severity: alert.severity,
             headline: alert.headline,
             message: alert.desc,
             effective: alert.effective,
             expires: alert.expires,
-            areas: alert.areas
+            areas: alert.areas,
         }));
     }
 
-    // Get air quality
     async getAirQuality(location: string): Promise<AirQuality> {
-        const encodedLocation = encodeURIComponent(location);
-        const url = `${this.baseUrl}/current.json?key=${this.apiKey}&q=${encodedLocation}&aqi=yes`;
-        const resp = await this.http.get<CurrentApiResponse>(url);
+        const resp = await this.weatherGet<CurrentApiResponse>("current.json", {
+            q: location,
+            aqi: "yes",
+        });
 
         const airQuality = resp.current.air_quality || {};
 
@@ -269,47 +290,25 @@ export class WeatherApiService implements IWeatherService {
             so2: airQuality.so2 || 0,
             pm2_5: airQuality.pm2_5 || 0,
             pm10: airQuality.pm10 || 0,
-            usEpaIndex: airQuality["us-epa-index"] ?? airQuality.usEpaIndex ?? 0
+            usEpaIndex: airQuality["us-epa-index"] ?? airQuality.usEpaIndex ?? 0,
         };
     }
 
-    // Get astronomy data
     async getAstronomy(location: string, date?: string): Promise<any> {
-        const encodedLocation = encodeURIComponent(location);
-        const dateParam = date || new Date().toISOString().split('T')[0];
-        const url = `${this.baseUrl}/astronomy.json?key=${this.apiKey}&q=${encodedLocation}&dt=${dateParam}`;
-
-        const resp = await this.http.get<{
-            astronomy: {
-                astro: {
-                    sunrise: string;
-                    sunset: string;
-                    moonrise: string;
-                    moonset: string;
-                    moon_phase: string;
-                    moon_illumination: string;
-                }
-            }
-        }>(url);
+        const dateParam = date || new Date().toISOString().split("T")[0];
+        const resp = await this.weatherGet<{ astronomy: { astro: any } }>("astronomy.json", {
+            q: location,
+            dt: dateParam,
+        });
 
         return resp.astronomy.astro;
     }
 
-    // Get historical weather
     async getHistoricalWeather(location: string, date: string): Promise<any> {
-        const encodedLocation = encodeURIComponent(location);
-        const url = `${this.baseUrl}/history.json?key=${this.apiKey}&q=${encodedLocation}&dt=${date}`;
-
-        const resp = await this.http.get<any>(url);
-        return resp;
+        return this.weatherGet<any>("history.json", { q: location, dt: date });
     }
 
-    // Get future weather (for locations where available)
     async getFutureWeather(location: string, date: string): Promise<any> {
-        const encodedLocation = encodeURIComponent(location);
-        const url = `${this.baseUrl}/future.json?key=${this.apiKey}&q=${encodedLocation}&dt=${date}`;
-
-        const resp = await this.http.get<any>(url);
-        return resp;
+        return this.weatherGet<any>("future.json", { q: location, dt: date });
     }
 }

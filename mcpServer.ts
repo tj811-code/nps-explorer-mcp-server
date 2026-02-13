@@ -23,6 +23,8 @@ export interface Env {
     NPS_API_KEY: string;
     RECGOV_API_KEY: string;
     WEATHER_API_KEY: string;
+    WEATHER_PROXY_BASE_URL?: string;
+    WEATHER_PROXY_BEARER_TOKEN?: string;
     ANTHROPIC_API_KEY: string;
 }
 
@@ -44,7 +46,12 @@ export class NpsMcpAgent extends McpAgent<Env, State> {
         const geocodingService = new NominatimGeocodingService(http);
         const npsService = new NpsApiService(http, this.env.NPS_API_KEY);
         const recGovService = new RecGovService(http, this.env.RECGOV_API_KEY);
-        const weatherService = new WeatherApiService(http, this.env.WEATHER_API_KEY);
+        const weatherService = new WeatherApiService(
+            http,
+            this.env.WEATHER_API_KEY,
+            this.env.WEATHER_PROXY_BASE_URL,
+            this.env.WEATHER_PROXY_BEARER_TOKEN
+        );
 
         // Register resources
         registerParkResources(this.server, npsService);
