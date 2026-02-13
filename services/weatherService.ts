@@ -269,7 +269,7 @@ export class WeatherApiService implements IWeatherService {
             so2: airQuality.so2 || 0,
             pm2_5: airQuality.pm2_5 || 0,
             pm10: airQuality.pm10 || 0,
-            usEpaIndex: airQuality.us - airQuality.epa - airQuality.index || 0
+            usEpaIndex: airQuality["us-epa-index"] ?? airQuality.usEpaIndex ?? 0
         };
     }
 

@@ -4,8 +4,7 @@
     "main": "./mcpServer.ts",
     "compatibility_date": "2025-02-04",
     "compatibility_flags": [
-        "nodejs_compat",
-        "nodejs_compat_populate_process_env"
+        "nodejs_compat"
     ],
     "durable_objects": {
         "bindings": [

@@ -7,16 +7,30 @@ function redactUrlSecrets(url: string): string {
         }
         return u.toString();
     } catch {
-        return url;
+        return "[invalid-url]";
     }
 }
 
 export class HttpClient {
+    constructor(private readonly timeoutMs: number = 10000) {}
+
     async get<T>(url: string, init?: RequestInit): Promise<T> {
-        const res = await fetch(url, init);
-        if (!res.ok) {
-            throw new Error(`GET ${redactUrlSecrets(url)} failed: ${res.status}`);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+
+        try {
+            const res = await fetch(url, { ...init, signal: controller.signal });
+            if (!res.ok) {
+                throw new Error(`GET ${redactUrlSecrets(url)} failed: ${res.status}`);
+            }
+            return (await res.json()) as T;
+        } catch (err) {
+            if (err instanceof DOMException && err.name === "AbortError") {
+                throw new Error(`GET ${redactUrlSecrets(url)} timed out after ${this.timeoutMs}ms`);
+            }
+            throw err;
+        } finally {
+            clearTimeout(timeout);
         }
-        return (await res.json()) as T;
     }
 }
