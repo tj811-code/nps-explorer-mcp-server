@@ -4,5 +4,7 @@ WEATHER_API_KEY=YOUR KEY FROM https://weatherapi.com/
 # Optional: route weather calls through your own proxy to avoid query-key egress from this worker
 # WEATHER_PROXY_BASE_URL=https://your-weather-proxy.example.workers.dev
 # WEATHER_PROXY_BEARER_TOKEN=strong-random-token
+# WEATHER_PROXY_SIGNING_SECRET=another-strong-random-secret
+# REQUIRE_WEATHER_PROXY=true
 GITHUB_CLIENT_ID=YOUR KEY FROM https://github.com/settings/applications
 GITHUB_CLIENT_SECRET=YOUR SECRET FROM https://github.com/settings/applications

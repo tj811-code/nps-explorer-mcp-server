@@ -25,10 +25,33 @@ export interface Env {
     WEATHER_API_KEY: string;
     WEATHER_PROXY_BASE_URL?: string;
     WEATHER_PROXY_BEARER_TOKEN?: string;
+    WEATHER_PROXY_SIGNING_SECRET?: string;
+    REQUIRE_WEATHER_PROXY?: string;
     ANTHROPIC_API_KEY: string;
 }
 
 type State = { counter: number };
+
+function asBool(value?: string): boolean {
+    return (value || "").toLowerCase() === "true";
+}
+
+function validateSecurityConfig(env: Env): void {
+    if (!env.COOKIE_ENCRYPTION_KEY || env.COOKIE_ENCRYPTION_KEY.length < 32) {
+        throw new Error("COOKIE_ENCRYPTION_KEY must be at least 32 characters and secret.");
+    }
+
+    const hasProxyBase = Boolean(env.WEATHER_PROXY_BASE_URL);
+    const hasProxyToken = Boolean(env.WEATHER_PROXY_BEARER_TOKEN);
+
+    if (hasProxyBase !== hasProxyToken) {
+        throw new Error("WEATHER_PROXY_BASE_URL and WEATHER_PROXY_BEARER_TOKEN must be set together.");
+    }
+
+    if (asBool(env.REQUIRE_WEATHER_PROXY) && (!hasProxyBase || !hasProxyToken)) {
+        throw new Error("REQUIRE_WEATHER_PROXY=true but proxy settings are incomplete.");
+    }
+}
 
 export class NpsMcpAgent extends McpAgent<Env, State> {
     server = new McpServer({
@@ -41,6 +64,8 @@ export class NpsMcpAgent extends McpAgent<Env, State> {
     };
 
     async init() {
+        validateSecurityConfig(this.env);
+
         // Initialize service dependencies
         const http = new HttpClient();
         const geocodingService = new NominatimGeocodingService(http);
@@ -50,7 +75,8 @@ export class NpsMcpAgent extends McpAgent<Env, State> {
             http,
             this.env.WEATHER_API_KEY,
             this.env.WEATHER_PROXY_BASE_URL,
-            this.env.WEATHER_PROXY_BEARER_TOKEN
+            this.env.WEATHER_PROXY_BEARER_TOKEN,
+            this.env.WEATHER_PROXY_SIGNING_SECRET
         );
 
         // Register resources

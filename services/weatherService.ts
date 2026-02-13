@@ -127,6 +127,26 @@ interface AlertsApiResponse {
     };
 }
 
+const encoder = new TextEncoder();
+
+function toBase64Url(bytes: Uint8Array): string {
+    let binary = "";
+    for (const b of bytes) binary += String.fromCharCode(b);
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function signProxyRequest(secret: string, payload: string): Promise<string> {
+    const key = await crypto.subtle.importKey(
+        "raw",
+        encoder.encode(secret),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"]
+    );
+    const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+    return toBase64Url(new Uint8Array(sig));
+}
+
 export class WeatherApiService implements IWeatherService {
     private readonly baseUrl = "https://api.weatherapi.com/v1";
 
@@ -134,7 +154,8 @@ export class WeatherApiService implements IWeatherService {
         private readonly http: HttpClient,
         private readonly apiKey: string,
         private readonly proxyBaseUrl?: string,
-        private readonly proxyBearerToken?: string
+        private readonly proxyBearerToken?: string,
+        private readonly proxySigningSecret?: string
     ) { }
 
     private async weatherGet<T>(endpoint: string, params: Record<string, string | number>): Promise<T> {
@@ -147,6 +168,12 @@ export class WeatherApiService implements IWeatherService {
             const headers: Record<string, string> = {};
             if (this.proxyBearerToken) {
                 headers["Authorization"] = `Bearer ${this.proxyBearerToken}`;
+            }
+            if (this.proxySigningSecret) {
+                const ts = Math.floor(Date.now() / 1000).toString();
+                const signingPayload = `${ts}.GET.${proxyUrl.pathname}${proxyUrl.search}`;
+                headers["X-Proxy-Timestamp"] = ts;
+                headers["X-Proxy-Signature"] = await signProxyRequest(this.proxySigningSecret, signingPayload);
             }
 
             return this.http.get<T>(proxyUrl.toString(), {
